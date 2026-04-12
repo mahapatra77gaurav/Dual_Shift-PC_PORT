@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI; // Added to access the Button component
 using TMPro;
 using UnityEngine.SceneManagement;
 
@@ -10,21 +11,24 @@ public class GameManager : MonoBehaviour
     public GameState CurrentState { get; private set; }
 
     [Header("Settings")]
-    public AnimationCurve speedCurve; 
+    public AnimationCurve speedCurve;
     public float lateGameRamp = 0.5f;
-    public float worldSpeed; 
+    public float worldSpeed;
     public float comboDuration = 2.0f;
 
     [Header("UI References")]
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text comboText;
     [SerializeField] private GameObject gameOverPanel;
-    [SerializeField] private TMP_Text finalScoreText;
-    [SerializeField] private GameObject pausePanel;
+    [SerializeField] private TMP_Text finalScoreText; [SerializeField] private GameObject pausePanel;
     [SerializeField] private GameObject mainMenuPanel;
     [SerializeField] private GameObject gameHUD;
-    
-    [SerializeField] private PlayerController playerController;
+
+    [SerializeField] private PlayerController playerController; [Header("PC Taunt Setup")]
+    [Tooltip("Drag the Text object inside your Revive Button here")]
+    [SerializeField] private TMP_Text reviveButtonText;
+    [Tooltip("Drag the Revive Button object itself here")]
+    [SerializeField] private Button reviveButton;
 
     private float score;
     private int kills;
@@ -78,21 +82,21 @@ public class GameManager : MonoBehaviour
         score = 0;
         kills = 0;
         comboMultiplier = 0;
-        levelTime = 0f; 
+        levelTime = 0f;
 
         SetPanelActive(mainMenuPanel, true);
         gameHUD.SetActive(false);
         SetPanelActive(pausePanel, false);
 
         worldSpeed = 0f;
-        Time.timeScale = 1; 
+        Time.timeScale = 1;
     }
 
     public void StartGame()
     {
         CurrentState = GameState.Playing;
         levelTime = 0f;
-        worldSpeed = speedCurve.Evaluate(0f); 
+        worldSpeed = speedCurve.Evaluate(0f);
 
         SetPanelActive(mainMenuPanel, false);
         gameHUD.SetActive(true);
@@ -102,7 +106,7 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentState != GameState.Playing) return;
         levelTime += Time.deltaTime;
-        
+
         if (speedCurve.length > 0)
         {
             float curveDuration = speedCurve.keys[speedCurve.length - 1].time;
@@ -118,15 +122,15 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        float currentMultiplier = 1 + comboMultiplier; 
+        float currentMultiplier = 1 + comboMultiplier;
         score += (worldSpeed * Time.deltaTime) * currentMultiplier;
-        
+
         if (comboTimer > 0)
         {
             comboTimer -= Time.deltaTime;
             if (comboTimer <= 0)
             {
-                comboMultiplier = 0; 
+                comboMultiplier = 0;
                 UpdateUI();
             }
         }
@@ -136,14 +140,14 @@ public class GameManager : MonoBehaviour
     public void AddKill()
     {
         kills++;
-        comboMultiplier++; 
+        comboMultiplier++;
         comboTimer = comboDuration;
         UpdateUI();
     }
 
     public void GameOver()
     {
-        if (CurrentState == GameState.GameOver) return; 
+        if (CurrentState == GameState.GameOver) return;
 
         StartCoroutine(GameOverSequence());
     }
@@ -154,14 +158,14 @@ public class GameManager : MonoBehaviour
         currentDeaths++;
         PlayerPrefs.SetInt("AdDeathCount", currentDeaths);
 
-        if (currentDeaths % 3 == 0) 
+        if (currentDeaths % 3 == 0)
         {
             if (AdManager.Instance != null)
             {
                 AdManager.Instance.ShowInterstitial();
             }
         }
-        
+
         CurrentState = GameState.GameOver;
 
         CameraShake.Instance.Shake(1.2f, 0.5f);
@@ -218,7 +222,7 @@ public class GameManager : MonoBehaviour
     public void QuitToMenu()
     {
         Time.timeScale = 1;
-        RestartGame(); 
+        RestartGame();
     }
 
     private void SetPanelActive(GameObject panel, bool active)
@@ -244,7 +248,7 @@ public class GameManager : MonoBehaviour
         int currentScore = (int)score;
         if (currentScore != lastDisplayedScore)
         {
-            if (scoreText != null) 
+            if (scoreText != null)
                 scoreText.SetText("SCORE\n<size=150%>{0}</size>", currentScore);
             lastDisplayedScore = currentScore;
         }
@@ -252,41 +256,60 @@ public class GameManager : MonoBehaviour
         int displayMult = 1 + comboMultiplier;
         if (displayMult != lastDisplayedCombo)
         {
-             if (comboText != null)
-             {
+            if (comboText != null)
+            {
                 comboText.SetText("x{0}", displayMult);
                 comboText.gameObject.SetActive(displayMult > 1);
-             }
-             lastDisplayedCombo = displayMult;
+            }
+            lastDisplayedCombo = displayMult;
         }
     }
-    
+
     public void OnReviveButtonClicked()
     {
-        try
+#if UNITY_ANDROID
+    // --- MOBILE BEHAVIOR (Normal) ---
+    try
+    {
+        if (AdManager.Instance != null)
         {
-            if (AdManager.Instance != null)
-            {
-                // CRITICAL FIX: Use the Show with Loading Screen method
-                AdManager.Instance.ShowRewardedWithLoading((bool success) => {
-                    Debug.Log($"Ad Callback Received. Success: {success}");
-                    if (success)
-                    {
-                        RevivePlayer(); 
-                    }
-                });
-            }
-            else
-            {
-                Debug.LogError("AdManager.Instance is null");
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError("Revive Error: " + e.Message);
+            AdManager.Instance.ShowRewardedWithLoading((bool success) => {
+                if (success) RevivePlayer(); 
+            });
         }
     }
-    
+    catch (System.Exception e) { Debug.LogError("Revive Error: " + e.Message); }
+#else
+        string[] trollMessages = {
+        "GIT GUD",
+        "SKILL ISSUE",
+        "No ads to save you now.",
+        "NICE TRY LOL",
+        "JUST RESTART"
+    };
+
+        // 2. Pick a random index from the list
+        int randomIndex = UnityEngine.Random.Range(0, trollMessages.Length);
+        string selectedMessage = trollMessages[randomIndex];
+
+        // 3. Update the UI
+        if (reviveButtonText != null)
+        {
+            reviveButtonText.text = selectedMessage;
+            reviveButtonText.color = Color.red;
+        }
+
+        if (reviveButton != null)
+        {
+            // We keep it interactable for ONE click so they see the first message, 
+            // then we disable it so they can't spam it.
+            reviveButton.interactable = false;
+        }
+
+        Debug.Log($"PC Player Taunted with: {selectedMessage}");
+#endif
+    }
+
     private void RevivePlayer()
     {
         Debug.Log("RevivePlayer called.");

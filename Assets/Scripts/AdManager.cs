@@ -1,27 +1,29 @@
 using UnityEngine;
-using GoogleMobileAds.Api;
-using GoogleMobileAds.Ump.Api;
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 
+// 1. Wrap the AdMob namespaces
+#if UNITY_ANDROID
+using GoogleMobileAds.Api;
+using GoogleMobileAds.Ump.Api;
+#endif
 
 public class AdManager : MonoBehaviour
 {
     public static AdManager Instance;
 
-    // TEST IDs (Replace with Real IDs for Release)
-    private string interstitialId = "ca-app-pub-2195761497058047/7260698795"; //ca-app-pub-3940256099942544/1033173712
-    private string rewardedId = "ca-app-pub-2195761497058047/4682636913"; //ca-app-pub-3940256099942544/5224354917
+    // TEST IDs
+    private string interstitialId = "ca-app-pub-2195761497058047/7260698795";
+    private string rewardedId = "ca-app-pub-2195761497058047/4682636913";
 
+    // 2. Wrap AdMob specific variables
+#if UNITY_ANDROID
     private InterstitialAd interstitialAd;
     private RewardedAd rewardedAd;
-
-    // DEBUG UI
+#endif
 
     private ConcurrentQueue<Action> mainThreadActions = new ConcurrentQueue<Action>();
-
-    // Callbacks for loading flow
     private Action<bool> _onRewardedAdLoadComplete;
 
     private void Awake()
@@ -37,29 +39,26 @@ public class AdManager : MonoBehaviour
         }
     }
 
-
-
     private void Update()
     {
         while (mainThreadActions.TryDequeue(out Action action))
         {
-            try 
-            { 
-                action.Invoke(); 
+            try
+            {
+                action.Invoke();
             }
-            catch (Exception e) 
-            { 
-                 Log("<color=red>Background Action Crash: " + e.Message + "\n" + e.StackTrace + "</color>"); 
+            catch (Exception e)
+            {
+                Log("<color=red>Background Action Crash: " + e.Message + "\n" + e.StackTrace + "</color>");
             }
         }
-
-
     }
 
     private void Start()
     {
         Log("Starting AdManager...");
 
+#if UNITY_ANDROID
         var debugSettings = new ConsentDebugSettings
         {
             DebugGeography = DebugGeography.EEA,
@@ -74,10 +73,15 @@ public class AdManager : MonoBehaviour
 
         Log("Checking Consent...");
         ConsentInformation.Update(request, OnConsentInfoUpdated);
+#else
+        Log("PC Build: Ads and Consent forms are disabled.");
+#endif
     }
 
     private void Log(string msg) { Debug.Log("[AdManager] " + msg); }
 
+    // 3. Wrap Consent Info because 'FormError' is an AdMob class
+#if UNITY_ANDROID
     private void OnConsentInfoUpdated(FormError error)
     {
         mainThreadActions.Enqueue(() =>
@@ -118,10 +122,12 @@ public class AdManager : MonoBehaviour
             });
         });
     }
+#endif
 
     // --- INTERSTITIAL ---
     public void LoadInterstitial()
     {
+#if UNITY_ANDROID
         if (interstitialAd != null)
         {
             interstitialAd.Destroy();
@@ -140,17 +146,23 @@ public class AdManager : MonoBehaviour
             interstitialAd = ad;
             interstitialAd.OnAdFullScreenContentClosed += LoadInterstitial;
         });
+#endif
     }
 
     public void ShowInterstitial()
     {
+#if UNITY_ANDROID
         if (interstitialAd != null && interstitialAd.CanShowAd()) interstitialAd.Show();
         else { Log("Interstitial not ready."); LoadInterstitial(); }
+#else
+        Log("PC Build: Skipping Interstitial Ad.");
+#endif
     }
 
     // --- REWARDED ---
     public void LoadRewarded()
     {
+#if UNITY_ANDROID
         if (rewardedAd != null)
         {
             rewardedAd.Destroy();
@@ -164,7 +176,6 @@ public class AdManager : MonoBehaviour
             {
                 if (error != null)
                 {
-                     // Provide very clear feedback on Code 3
                      string err = $"Rewarded Load Failed: {error.GetMessage()} Code:{error.GetCode()}";
                      Log(err);
                      if(error.GetCode() == 3)
@@ -190,11 +201,12 @@ public class AdManager : MonoBehaviour
                 _onRewardedAdLoadComplete = null;
             });
         });
+#endif
     }
 
-    // new Loading Screen Method
     public void ShowRewardedWithLoading(Action<bool> onReward)
     {
+#if UNITY_ANDROID
         if (rewardedAd != null && rewardedAd.CanShowAd())
         {
             ShowRewarded(onReward);
@@ -202,13 +214,11 @@ public class AdManager : MonoBehaviour
         else
         {
             Log("Ad not ready. Showing Loading Screen...");
-            // Use existing LoadingScreenManager
             if (LoadingScreenManager.Instance != null)
                 LoadingScreenManager.Instance.ShowLoadingScreen("Loading Ad...");
             else
                 Log("LoadingScreenManager not found!");
             
-            // Set callback
             _onRewardedAdLoadComplete = (bool success) => 
             {
                 if (LoadingScreenManager.Instance != null)
@@ -222,35 +232,35 @@ public class AdManager : MonoBehaviour
                 else
                 {
                     Log("Ad failed to load after wait.");
-                    // Optional: Show a toast/message to user saying "Ad Unavailable"
                     onReward?.Invoke(false);
                 }
             };
 
             LoadRewarded();
         }
+#else
+        Log("PC Build: Giving Reward instantly (No loading screen needed).");
+        onReward?.Invoke(true);
+#endif
     }
 
     public void ShowRewarded(Action<bool> onReward)
     {
+#if UNITY_ANDROID
         if (rewardedAd != null && rewardedAd.CanShowAd())
         {
-            // Capture specific instance to avoid race conditions with checking 'this.rewardedAd'
             RewardedAd adToShow = rewardedAd;
             bool rewardEarned = false;
             
             void HandleAdClosed()
             {
-                // Wrap ENTIRE callback in try-catch to diagnosis crash here
                 try
                 {
-                    // Unsubscribe from the specific instance we showed
                     if (adToShow != null)
                     {
                         adToShow.OnAdFullScreenContentClosed -= HandleAdClosed;
                     }
 
-                    // Dispatch result to main thread
                     mainThreadActions.Enqueue(() => 
                     {
                         try
@@ -272,19 +282,14 @@ public class AdManager : MonoBehaviour
                             Log($"<color=red>Crash invoking callback: {ex.Message}\n{ex.StackTrace}</color>");
                         }
                         
-                        // Load next ad
                         LoadRewarded();
                     });
                 }
                 catch (Exception e)
                 {
-                    // This catches the crash if 'adToShow' interaction fails 
-                    // or if something else in this background callback fails
-                     // We MUST still try to dispatch the result to main thread so the game doesn't hang
                     mainThreadActions.Enqueue(() => 
                     {
                         Log($"<color=red>HandleAdClosed CRASHED: {e.Message}</color>");
-                        // Assume success if reward was earned before crash? Or just fail safe.
                         onReward?.Invoke(rewardEarned); 
                         LoadRewarded();
                     });
@@ -292,14 +297,17 @@ public class AdManager : MonoBehaviour
             }
 
             adToShow.OnAdFullScreenContentClosed += HandleAdClosed;
-            
             adToShow.Show((Reward reward) => { rewardEarned = true; });
         }
         else
         {
-            Log("Rewarded Ad not ready (ShowRewarded called directly).");
+            Log("Rewarded Ad not ready.");
             onReward?.Invoke(false);
             LoadRewarded();
         }
+#else
+        Log("PC Build: Denying reward to taunt the player.");
+        onReward?.Invoke(false);
+#endif
     }
 }

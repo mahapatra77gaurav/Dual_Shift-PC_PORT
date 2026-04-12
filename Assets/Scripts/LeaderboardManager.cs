@@ -1,23 +1,26 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+
+#if UNITY_ANDROID
 using GooglePlayGames;
 using GooglePlayGames.BasicApi;
 using UnityEngine.SocialPlatforms;
+#endif
 
 public class LeaderboardManager : MonoBehaviour
 {
     [Header("Custom UI")]
     [Tooltip("The panel containing the custom leaderboard UI")]
-    [SerializeField] private GameObject customLeaderboardPanel;
-    [Tooltip("Container for leaderboard rows")]
-    [SerializeField] private Transform rowContainer; 
+    [SerializeField] private GameObject customLeaderboardPanel; [Tooltip("Container for leaderboard rows")]
+    [SerializeField] private Transform rowContainer;
     [Tooltip("Prefab for leaderboard row")]
-    [SerializeField] private GameObject rowPrefab;   
+    [SerializeField] private GameObject rowPrefab;
     [Tooltip("The row displaying the player's own score")]
-    [SerializeField] private LeaderboardRowUI myScoreRow; 
-    
+    [SerializeField] private LeaderboardRowUI myScoreRow;
+
     public static LeaderboardManager Instance;
+
     [Header("Help UI")]
     [Tooltip("Button to show when player score is missing")]
     [SerializeField] private GameObject helpButton;
@@ -33,8 +36,6 @@ public class LeaderboardManager : MonoBehaviour
     {
         if (helpPopup != null) helpPopup.SetActive(false);
     }
-    
-
 
     private void Awake()
     {
@@ -72,15 +73,14 @@ public class LeaderboardManager : MonoBehaviour
 #endif
     }
 
+    // 2. Wrap this whole method because SignInStatus is a mobile-only variable type
+#if UNITY_ANDROID
     private void ProcessAuthentication(SignInStatus status)
     {
         if (status == SignInStatus.Success)
         {
             Debug.Log("[GPGS] Authenticated successfully.");
-            // Re-enforce Social.Active just in case
             Social.Active = PlayGamesPlatform.Instance;
-            
-            // Sync cloud scores to local device
             SyncCloudScores();
         }
         else
@@ -88,7 +88,6 @@ public class LeaderboardManager : MonoBehaviour
             Debug.LogError($"[GPGS] Authentication Failed. Status: {status}");
         }
         
-        // Force update Settings UI even if it is inactive (hidden)
         SettingsManager[] settingsFn = FindObjectsByType<SettingsManager>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (var settings in settingsFn)
         {
@@ -98,7 +97,6 @@ public class LeaderboardManager : MonoBehaviour
 
     private void SyncCloudScores()
     {
-#if UNITY_ANDROID
         if (PlayGamesPlatform.Instance == null || !PlayGamesPlatform.Instance.IsAuthenticated()) return;
 
         Debug.Log("[GPGS] Starting Score Sync...");
@@ -117,11 +115,8 @@ public class LeaderboardManager : MonoBehaviour
                     long cloudScore = data.PlayerScore.value;
                     float localScore = PlayerPrefs.GetFloat("BestScore", 0);
                     
-                    Debug.Log($"[GPGS] Cloud Score: {cloudScore}, Local Score: {localScore}");
-
                     if (cloudScore > localScore)
                     {
-                        Debug.Log("[GPGS] Cloud score is higher. Updating local BestScore.");
                         PlayerPrefs.SetFloat("BestScore", cloudScore);
                         PlayerPrefs.Save();
                     }
@@ -143,22 +138,20 @@ public class LeaderboardManager : MonoBehaviour
                      long cloudKills = data.PlayerScore.value;
                      int localKills = PlayerPrefs.GetInt("MaxKills", 0);
                      
-                     Debug.Log($"[GPGS] Cloud Kills: {cloudKills}, Local Kills: {localKills}");
-
                      if (cloudKills > localKills)
                      {
-                         Debug.Log("[GPGS] Cloud kills are higher. Updating local MaxKills.");
                          PlayerPrefs.SetInt("MaxKills", (int)cloudKills);
                          PlayerPrefs.Save();
                      }
                  }
              }
          );
-#endif
     }
+#endif
 
     public void SubmitScore(long score)
     {
+#if UNITY_ANDROID
         try
         {
             if (PlayGamesPlatform.Instance != null && PlayGamesPlatform.Instance.IsAuthenticated())
@@ -173,10 +166,14 @@ public class LeaderboardManager : MonoBehaviour
         {
             Debug.LogWarning("[GPGS] SubmitScore error: " + e.Message);
         }
+#else
+        Debug.Log($"[PC Build] Fake Submit Score: {score}. (Google Play is disabled on PC)");
+#endif
     }
-    
+
     public void SubmitKills(long kills)
     {
+#if UNITY_ANDROID
         try
         {
             if (PlayGamesPlatform.Instance != null && PlayGamesPlatform.Instance.IsAuthenticated())
@@ -191,6 +188,7 @@ public class LeaderboardManager : MonoBehaviour
         {
             Debug.LogWarning("[GPGS] SubmitKills error: " + e.Message);
         }
+#endif
     }
 
     public void ShowLeaderboard()
@@ -198,11 +196,7 @@ public class LeaderboardManager : MonoBehaviour
 #if UNITY_ANDROID
         try
         {
-            if (PlayGamesPlatform.Instance == null)
-            {
-                Debug.LogWarning("[GPGS] PlayGamesPlatform.Instance is null!");
-                return;
-            }
+            if (PlayGamesPlatform.Instance == null) return;
             
             if (!PlayGamesPlatform.Instance.IsAuthenticated())
             {
@@ -230,25 +224,31 @@ public class LeaderboardManager : MonoBehaviour
         {
             Debug.LogError("[GPGS] ShowLeaderboard error: " + e.Message);
         }
+#else
+        Debug.Log("[PC Build] Leaderboard button clicked, but leaderboards are disabled on PC.");
 #endif
     }
-    
+
     public void CloseLeaderboard()
     {
         if (customLeaderboardPanel != null)
             customLeaderboardPanel.SetActive(false);
     }
-    
+
     public void OpenHighScoreTab()
     {
+#if UNITY_ANDROID
         RefreshBoard(GPGSIds.leaderboard_high_scores);
+#endif
     }
-    
+
     public void OpenMaxKillsTab()
     {
+#if UNITY_ANDROID
         RefreshBoard(GPGSIds.leaderboard_max_kills);
+#endif
     }
-    
+
     public void SignIn()
     {
 #if UNITY_ANDROID
@@ -265,14 +265,12 @@ public class LeaderboardManager : MonoBehaviour
         }
 #endif
     }
-    
+
+    // 3. Wrapped the GPGS dependent methods
+#if UNITY_ANDROID
     private void RefreshBoard(string leaderboardId)
     {
-        if (PlayGamesPlatform.Instance == null)
-        {
-            Debug.LogWarning("[GPGS] PlayGamesPlatform.Instance is null in RefreshBoard!");
-            return;
-        }
+        if (PlayGamesPlatform.Instance == null) return;
         
         if (rowContainer != null)
         {
@@ -295,17 +293,13 @@ public class LeaderboardManager : MonoBehaviour
                         userIds.Add(score.userID);
                     }
 
-                    // Explicitly use PlayGamesPlatform instance cast to ISocialPlatform for LoadUsers
                     ((ISocialPlatform)PlayGamesPlatform.Instance).LoadUsers(userIds.ToArray(), (users) =>
                     {
                         Dictionary<string, string> names = new Dictionary<string, string>();
                         
                         if (users != null)
                         {
-                            foreach (var user in users)
-                            {
-                                names[user.id] = user.userName;
-                            }
+                            foreach (var user in users) names[user.id] = user.userName;
                         }
 
                         foreach (var score in data.Scores)
@@ -315,28 +309,19 @@ public class LeaderboardManager : MonoBehaviour
 
                             string displayName = score.userID; 
 
-                            if (names.ContainsKey(score.userID))
-                            {
-                                displayName = names[score.userID];
-                            }
+                            if (names.ContainsKey(score.userID)) displayName = names[score.userID];
                             
-                            // Use PlayGamesPlatform local user
                             if (score.userID == PlayGamesPlatform.Instance.localUser.id)
                             {
                                 displayName = $"YOU ({PlayGamesPlatform.Instance.localUser.userName})";
                             }
 
-                            rowScript.SetData(
-                                score.rank.ToString(), 
-                                displayName, 
-                                score.value.ToString()
-                            );
+                            rowScript.SetData(score.rank.ToString(), displayName, score.value.ToString());
                         }
                     });
                     
                     if (data.PlayerScore != null)
                     {
-                        // Optimistic Update: Check local score vs cloud score
                         long cloudScore = data.PlayerScore.value;
                         long displayScore = cloudScore;
 
@@ -358,20 +343,13 @@ public class LeaderboardManager : MonoBehaviour
                             displayScore.ToString()
                         );
                         
-                        // Hide help button if we have a score
                         if (helpButton != null) helpButton.SetActive(false);
                     }
                     else
                     {
                         myScoreRow.gameObject.SetActive(false);
-                        
-                        // Show help button if score is missing
                         if (helpButton != null) helpButton.SetActive(true);
                     }
-                }
-                else
-                {
-                    Debug.LogWarning("Error loading leaderboard data.");
                 }
             }
         );
@@ -379,10 +357,7 @@ public class LeaderboardManager : MonoBehaviour
     
     public void FetchAndShowCustomUI()
     {
-        if (!PlayGamesPlatform.Instance.IsAuthenticated())
-        {
-            return;
-        }
+        if (!PlayGamesPlatform.Instance.IsAuthenticated()) return;
 
         customLeaderboardPanel.SetActive(true);
         foreach (Transform child in rowContainer) Destroy(child.gameObject);
@@ -402,18 +377,11 @@ public class LeaderboardManager : MonoBehaviour
                         GameObject rowObj = Instantiate(rowPrefab, rowContainer);
                         LeaderboardRowUI rowScript = rowObj.GetComponent<LeaderboardRowUI>();
                         
-                        rowScript.SetData(
-                            score.rank.ToString(), 
-                            score.userID, 
-                            score.value.ToString()
-                        );
+                        rowScript.SetData(score.rank.ToString(), score.userID, score.value.ToString());
                     }
-                }
-                else
-                {
-                    Debug.LogWarning("Error loading leaderboard data.");
                 }
             }
         );
     }
+#endif
 }

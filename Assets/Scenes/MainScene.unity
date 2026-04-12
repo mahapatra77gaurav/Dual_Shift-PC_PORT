@@ -5217,7 +5217,7 @@ Camera:
   far clip plane: 1000
   field of view: 34
   orthographic: 1
-  orthographic size: 7.529412
+  orthographic size: 8
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -6637,6 +6637,8 @@ MonoBehaviour:
   mainMenuPanel: {fileID: 302634786}
   gameHUD: {fileID: 541865528}
   playerController: {fileID: 1312385855}
+  reviveButtonText: {fileID: 1095755889}
+  reviveButton: {fileID: 407067382}
 --- !u!4 &624927633
 Transform:
   m_ObjectHideFlags: 0
@@ -11309,7 +11311,7 @@ GameObject:
   - component: {fileID: 1217045404}
   - component: {fileID: 1217045406}
   m_Layer: 5
-  m_Name: Tap To Start
+  m_Name: Click To Start
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -11354,7 +11356,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Tap To Start
+  m_text: Click To Start
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 47b46098529a34905849dd6459ace236, type: 2}
   m_sharedMaterial: {fileID: 2637251550871327571, guid: 47b46098529a34905849dd6459ace236, type: 2}
@@ -20434,7 +20436,7 @@ GameObject:
   - component: {fileID: 1777672098}
   - component: {fileID: 1777672097}
   m_Layer: 5
-  m_Name: TapToRestart
+  m_Name: ClickToRestart
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -20479,7 +20481,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Tap To Restart
+  m_text: Click To Restart
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: c8414c0c2448b44bfafb8dd0a979001d, type: 2}
   m_sharedMaterial: {fileID: 6532851274401645827, guid: c8414c0c2448b44bfafb8dd0a979001d, type: 2}
