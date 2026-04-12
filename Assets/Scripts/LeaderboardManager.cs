@@ -6,13 +6,18 @@ using System.Collections.Generic;
 using GooglePlayGames;
 using GooglePlayGames.BasicApi;
 using UnityEngine.SocialPlatforms;
+#else
+// PC/Web: PlayFab namespaces
+using PlayFab;
+using PlayFab.ClientModels;
 #endif
 
 public class LeaderboardManager : MonoBehaviour
 {
     [Header("Custom UI")]
     [Tooltip("The panel containing the custom leaderboard UI")]
-    [SerializeField] private GameObject customLeaderboardPanel; [Tooltip("Container for leaderboard rows")]
+    [SerializeField] private GameObject customLeaderboardPanel;
+    [Tooltip("Container for leaderboard rows")]
     [SerializeField] private Transform rowContainer;
     [Tooltip("Prefab for leaderboard row")]
     [SerializeField] private GameObject rowPrefab;
@@ -47,7 +52,6 @@ public class LeaderboardManager : MonoBehaviour
         {
             PlayGamesPlatform.DebugLogEnabled = true;
             PlayGamesPlatform.Activate();
-            // Explicitly force the assignment to be sure
             Social.Active = PlayGamesPlatform.Instance;
         }
         catch (System.Exception e)
@@ -63,17 +67,42 @@ public class LeaderboardManager : MonoBehaviour
         try
         {
             Debug.Log("[GPGS] Starting Authentication...");
-            // Use ManuallyAuthenticate to consistent behavior with button click
             PlayGamesPlatform.Instance.ManuallyAuthenticate(ProcessAuthentication);
         }
         catch (System.Exception e)
         {
             Debug.LogError("[GPGS] Failed to Authenticate: " + e.Message);
         }
+#else
+        // PC BEHAVIOR: Silent Login
+        LoginToPlayFab();
 #endif
     }
 
-    // 2. Wrap this whole method because SignInStatus is a mobile-only variable type
+#if !UNITY_ANDROID
+    // --- PLAYFAB LOGIN LOGIC ---
+    private void LoginToPlayFab()
+    {
+        Debug.Log("PC: Attempting PlayFab Login...");
+        var request = new LoginWithCustomIDRequest
+        {
+            CustomId = SystemInfo.deviceUniqueIdentifier,
+            CreateAccount = true
+        };
+        PlayFabClientAPI.LoginWithCustomID(request, OnLoginSuccess, OnPlayFabError);
+    }
+
+    private void OnLoginSuccess(LoginResult result)
+    {
+        Debug.Log("PC: PlayFab Login Successful!");
+    }
+
+    private void OnPlayFabError(PlayFabError error)
+    {
+        Debug.LogError("PC: PlayFab Error: " + error.GenerateErrorReport());
+    }
+#endif
+
 #if UNITY_ANDROID
     private void ProcessAuthentication(SignInStatus status)
     {
@@ -99,9 +128,6 @@ public class LeaderboardManager : MonoBehaviour
     {
         if (PlayGamesPlatform.Instance == null || !PlayGamesPlatform.Instance.IsAuthenticated()) return;
 
-        Debug.Log("[GPGS] Starting Score Sync...");
-
-        // 1. Sync High Score
         PlayGamesPlatform.Instance.LoadScores(
             GPGSIds.leaderboard_high_scores,
             LeaderboardStart.PlayerCentered,
@@ -114,7 +140,6 @@ public class LeaderboardManager : MonoBehaviour
                 {
                     long cloudScore = data.PlayerScore.value;
                     float localScore = PlayerPrefs.GetFloat("BestScore", 0);
-                    
                     if (cloudScore > localScore)
                     {
                         PlayerPrefs.SetFloat("BestScore", cloudScore);
@@ -123,29 +148,6 @@ public class LeaderboardManager : MonoBehaviour
                 }
             }
         );
-
-        // 2. Sync Max Kills
-        PlayGamesPlatform.Instance.LoadScores(
-             GPGSIds.leaderboard_max_kills,
-             LeaderboardStart.PlayerCentered,
-             1,
-             LeaderboardCollection.Public,
-             LeaderboardTimeSpan.AllTime,
-             (data) =>
-             {
-                 if (data.Valid && data.PlayerScore != null)
-                 {
-                     long cloudKills = data.PlayerScore.value;
-                     int localKills = PlayerPrefs.GetInt("MaxKills", 0);
-                     
-                     if (cloudKills > localKills)
-                     {
-                         PlayerPrefs.SetInt("MaxKills", (int)cloudKills);
-                         PlayerPrefs.Save();
-                     }
-                 }
-             }
-         );
     }
 #endif
 
@@ -158,16 +160,19 @@ public class LeaderboardManager : MonoBehaviour
             {
                 PlayGamesPlatform.Instance.ReportScore(score, GPGSIds.leaderboard_high_scores, (bool success) => {
                     if (success) Debug.Log($"[GPGS] SubmitScore Success: {score}");
-                    else Debug.LogError($"[GPGS] SubmitScore Failed: {score}");
                 });
             }
         }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[GPGS] SubmitScore error: " + e.Message);
-        }
+        catch (System.Exception e) { Debug.LogWarning("[GPGS] SubmitScore error: " + e.Message); }
 #else
-        Debug.Log($"[PC Build] Fake Submit Score: {score}. (Google Play is disabled on PC)");
+        // PC BEHAVIOR: Submit to PlayFab
+        var request = new UpdatePlayerStatisticsRequest
+        {
+            Statistics = new List<StatisticUpdate> {
+                new StatisticUpdate { StatisticName = "HighScore", Value = (int)score }
+            }
+        };
+        PlayFabClientAPI.UpdatePlayerStatistics(request, result => Debug.Log("PC: Score Submitted to PlayFab"), OnPlayFabError);
 #endif
     }
 
@@ -180,14 +185,19 @@ public class LeaderboardManager : MonoBehaviour
             {
                 PlayGamesPlatform.Instance.ReportScore(kills, GPGSIds.leaderboard_max_kills, (bool success) => {
                      if (success) Debug.Log($"[GPGS] SubmitKills Success: {kills}");
-                     else Debug.LogError($"[GPGS] SubmitKills Failed: {kills}");
                 });
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception e) { Debug.LogWarning("[GPGS] SubmitKills error: " + e.Message); }
+#else
+        // PC BEHAVIOR: Submit Max Kills to PlayFab (Optional: Create a "MaxKills" statistic in PlayFab dashboard)
+        var request = new UpdatePlayerStatisticsRequest
         {
-            Debug.LogWarning("[GPGS] SubmitKills error: " + e.Message);
-        }
+            Statistics = new List<StatisticUpdate> {
+                new StatisticUpdate { StatisticName = "MaxKills", Value = (int)kills }
+            }
+        };
+        PlayFabClientAPI.UpdatePlayerStatistics(request, result => Debug.Log("PC: Kills Submitted to PlayFab"), OnPlayFabError);
 #endif
     }
 
@@ -197,35 +207,31 @@ public class LeaderboardManager : MonoBehaviour
         try
         {
             if (PlayGamesPlatform.Instance == null) return;
-            
             if (!PlayGamesPlatform.Instance.IsAuthenticated())
             {
                 PlayGamesPlatform.Instance.ManuallyAuthenticate((status) => {
                     ProcessAuthentication(status);
-                    if (status == SignInStatus.Success)
+                    if (status == SignInStatus.Success && customLeaderboardPanel != null)
                     {
-                        if (customLeaderboardPanel != null)
-                        {
-                            customLeaderboardPanel.SetActive(true);
-                            OpenHighScoreTab();
-                        }
+                        customLeaderboardPanel.SetActive(true);
+                        OpenHighScoreTab();
                     }
                 });
                 return;
             }
-
-            if (customLeaderboardPanel != null)
-            {
+            if (customLeaderboardPanel != null) {
                 customLeaderboardPanel.SetActive(true);
                 OpenHighScoreTab();
             }
         }
-        catch (System.Exception e)
-        {
-            Debug.LogError("[GPGS] ShowLeaderboard error: " + e.Message);
-        }
+        catch (System.Exception e) { Debug.LogError("[GPGS] ShowLeaderboard error: " + e.Message); }
 #else
-        Debug.Log("[PC Build] Leaderboard button clicked, but leaderboards are disabled on PC.");
+        // PC BEHAVIOR: Open the panel and fetch scores
+        if (customLeaderboardPanel != null)
+        {
+            customLeaderboardPanel.SetActive(true);
+            RefreshPlayFabBoard("HighScore");
+        }
 #endif
     }
 
@@ -235,10 +241,42 @@ public class LeaderboardManager : MonoBehaviour
             customLeaderboardPanel.SetActive(false);
     }
 
+#if !UNITY_ANDROID
+    // --- PC SPECIFIC REFRESH LOGIC ---
+    public void RefreshPlayFabBoard(string statName)
+    {
+        var request = new GetLeaderboardRequest
+        {
+            StatisticName = statName,
+            StartPosition = 0,
+            MaxResultsCount = 10
+        };
+
+        PlayFabClientAPI.GetLeaderboard(request, result => {
+            foreach (Transform child in rowContainer) Destroy(child.gameObject);
+
+            foreach (var item in result.Leaderboard)
+            {
+                GameObject rowObj = Instantiate(rowPrefab, rowContainer);
+                LeaderboardRowUI rowScript = rowObj.GetComponent<LeaderboardRowUI>();
+
+                string displayName = string.IsNullOrEmpty(item.DisplayName) ? "Guest_" + item.PlayFabId.Substring(0, 5) : item.DisplayName;
+
+                // Highlight the player's own row if it's them
+                if (item.PlayFabId == result.Leaderboard[0].PlayFabId) { /* Optional logic */ }
+
+                rowScript.SetData((item.Position + 1).ToString(), displayName, item.StatValue.ToString());
+            }
+        }, OnPlayFabError);
+    }
+#endif
+
     public void OpenHighScoreTab()
     {
 #if UNITY_ANDROID
         RefreshBoard(GPGSIds.leaderboard_high_scores);
+#else
+        RefreshPlayFabBoard("HighScore");
 #endif
     }
 
@@ -246,6 +284,8 @@ public class LeaderboardManager : MonoBehaviour
     {
 #if UNITY_ANDROID
         RefreshBoard(GPGSIds.leaderboard_max_kills);
+#else
+        RefreshPlayFabBoard("MaxKills");
 #endif
     }
 
@@ -259,129 +299,53 @@ public class LeaderboardManager : MonoBehaviour
                 PlayGamesPlatform.Instance.ManuallyAuthenticate(ProcessAuthentication);
             }
         }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[GPGS] SignIn error: " + e.Message);
-        }
+        catch (System.Exception e) { Debug.LogWarning("[GPGS] SignIn error: " + e.Message); }
 #endif
     }
 
-    // 3. Wrapped the GPGS dependent methods
 #if UNITY_ANDROID
     private void RefreshBoard(string leaderboardId)
     {
         if (PlayGamesPlatform.Instance == null) return;
-        
-        if (rowContainer != null)
-        {
-            foreach (Transform child in rowContainer) Destroy(child.gameObject);
-        }
+        if (rowContainer != null) { foreach (Transform child in rowContainer) Destroy(child.gameObject); }
 
         PlayGamesPlatform.Instance.LoadScores(
-            leaderboardId,
-            LeaderboardStart.TopScores,
-            10,
-            LeaderboardCollection.Public,
-            LeaderboardTimeSpan.AllTime,
-            (data) =>
-            {
-                if (data.Valid)
-                {
+            leaderboardId, LeaderboardStart.TopScores, 10, LeaderboardCollection.Public, LeaderboardTimeSpan.AllTime,
+            (data) => {
+                if (data.Valid) {
                     List<string> userIds = new List<string>();
-                    foreach (var score in data.Scores)
-                    {
-                        userIds.Add(score.userID);
-                    }
+                    foreach (var score in data.Scores) userIds.Add(score.userID);
 
-                    ((ISocialPlatform)PlayGamesPlatform.Instance).LoadUsers(userIds.ToArray(), (users) =>
-                    {
+                    ((ISocialPlatform)PlayGamesPlatform.Instance).LoadUsers(userIds.ToArray(), (users) => {
                         Dictionary<string, string> names = new Dictionary<string, string>();
-                        
-                        if (users != null)
-                        {
-                            foreach (var user in users) names[user.id] = user.userName;
-                        }
-
-                        foreach (var score in data.Scores)
-                        {
+                        if (users != null) { foreach (var user in users) names[user.id] = user.userName; }
+                        foreach (var score in data.Scores) {
                             GameObject rowObj = Instantiate(rowPrefab, rowContainer);
                             LeaderboardRowUI rowScript = rowObj.GetComponent<LeaderboardRowUI>();
-
-                            string displayName = score.userID; 
-
-                            if (names.ContainsKey(score.userID)) displayName = names[score.userID];
-                            
-                            if (score.userID == PlayGamesPlatform.Instance.localUser.id)
-                            {
-                                displayName = $"YOU ({PlayGamesPlatform.Instance.localUser.userName})";
-                            }
-
+                            string displayName = names.ContainsKey(score.userID) ? names[score.userID] : score.userID;
                             rowScript.SetData(score.rank.ToString(), displayName, score.value.ToString());
                         }
                     });
-                    
-                    if (data.PlayerScore != null)
-                    {
-                        long cloudScore = data.PlayerScore.value;
-                        long displayScore = cloudScore;
-
-                        if (leaderboardId == GPGSIds.leaderboard_high_scores)
-                        {
-                            long localScore = (long)PlayerPrefs.GetFloat("BestScore", 0);
-                            if (localScore > cloudScore) displayScore = localScore;
-                        }
-                        else if (leaderboardId == GPGSIds.leaderboard_max_kills)
-                        {
-                            long localKills = (long)PlayerPrefs.GetInt("MaxKills", 0);
-                            if (localKills > cloudScore) displayScore = localKills;
-                        }
-
-                        myScoreRow.gameObject.SetActive(true);
-                        myScoreRow.SetData(
-                            data.PlayerScore.rank.ToString(),
-                            $"YOU ({PlayGamesPlatform.Instance.localUser.userName})", 
-                            displayScore.ToString()
-                        );
-                        
-                        if (helpButton != null) helpButton.SetActive(false);
-                    }
-                    else
-                    {
-                        myScoreRow.gameObject.SetActive(false);
-                        if (helpButton != null) helpButton.SetActive(true);
-                    }
                 }
             }
         );
     }
-    
-    public void FetchAndShowCustomUI()
+#endif
+#if !UNITY_ANDROID
+    // Call this from a UI Button to save the player's name to the cloud
+    public void SetPlayerName(string name)
     {
-        if (!PlayGamesPlatform.Instance.IsAuthenticated()) return;
+        // Simple check to make sure the name isn't empty
+        if (string.IsNullOrEmpty(name)) return;
 
-        customLeaderboardPanel.SetActive(true);
-        foreach (Transform child in rowContainer) Destroy(child.gameObject);
+        var request = new UpdateUserTitleDisplayNameRequest
+        {
+            DisplayName = name
+        };
 
-        PlayGamesPlatform.Instance.LoadScores(
-            GPGSIds.leaderboard_high_scores,
-            LeaderboardStart.TopScores,
-            10,
-            LeaderboardCollection.Public,
-            LeaderboardTimeSpan.AllTime,
-            (data) =>
-            {
-                if (data.Valid)
-                {
-                    foreach (var score in data.Scores)
-                    {
-                        GameObject rowObj = Instantiate(rowPrefab, rowContainer);
-                        LeaderboardRowUI rowScript = rowObj.GetComponent<LeaderboardRowUI>();
-                        
-                        rowScript.SetData(score.rank.ToString(), score.userID, score.value.ToString());
-                    }
-                }
-            }
-        );
+        PlayFabClientAPI.UpdateUserTitleDisplayName(request, result => {
+            Debug.Log("PC: Player Name updated to: " + result.DisplayName);
+        }, OnPlayFabError);
     }
 #endif
 }
