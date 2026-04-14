@@ -1,0 +1,9 @@
+﻿<Solution>
+  <Project Path="Google.Play.Games.Editor.csproj" />
+  <Project Path="PlayFab.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Google.Play.Games.csproj" />
+  <Project Path="PlayFabEditorExtensions.csproj" />
+  <Project Path="GoogleMobileAds.Editor.csproj" />
+  <Project Path="PlayFabSDKEditor.csproj" />
+</Solution>
