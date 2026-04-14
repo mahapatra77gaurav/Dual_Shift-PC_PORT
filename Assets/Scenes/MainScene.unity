@@ -1980,6 +1980,9 @@ MonoBehaviour:
     - m_Text: 120 FPS
       m_Image: {fileID: 0}
       m_Color: {r: 1, g: 1, b: 1, a: 1}
+    - m_Text: 999 FPS
+      m_Image: {fileID: 0}
+      m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -2371,7 +2374,7 @@ RectTransform:
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: 1733, y: -614}
-  m_SizeDelta: {x: 2611.7368, y: 2536.7598}
+  m_SizeDelta: {x: 3852.33, y: 2536.76}
   m_Pivot: {x: 1, y: 0}
 --- !u!114 &219105410
 MonoBehaviour:
@@ -13676,7 +13679,7 @@ MonoBehaviour:
   m_fontColor32:
     serializedVersion: 2
     rgba: 4278190080
-  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:

@@ -1602,7 +1602,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dad3760c2d911412a99a56c2dd7637dd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TutorialTrigger
-  textToDisplay: Tap to Switch!
+  textToDisplay: SPACE TO SWITCH
   actionType: Switch
 --- !u!1 &9115551095472972825
 GameObject:
