@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using TMPro;
 
 #if UNITY_ANDROID
 using GooglePlayGames;
@@ -31,6 +32,10 @@ public class LeaderboardManager : MonoBehaviour
     [SerializeField] private GameObject helpButton;
     [Tooltip("Popup explaining privacy settings")]
     [SerializeField] private GameObject helpPopup;
+
+    [Header("PC Username UI")]
+    public GameObject pcNamePanel;
+    public TMP_InputField pcNameInput;
 
     public void OpenHelpPopup()
     {
@@ -95,6 +100,7 @@ public class LeaderboardManager : MonoBehaviour
     private void OnLoginSuccess(LoginResult result)
     {
         Debug.Log("PC: PlayFab Login Successful!");
+        CheckForPlayerName();
     }
 
     private void OnPlayFabError(PlayFabError error)
@@ -332,20 +338,41 @@ public class LeaderboardManager : MonoBehaviour
     }
 #endif
 #if !UNITY_ANDROID
-    // Call this from a UI Button to save the player's name to the cloud
-    public void SetPlayerName(string name)
+    // 1. We call this after login to see if we need to show the popup
+    public void CheckForPlayerName()
     {
-        // Simple check to make sure the name isn't empty
-        if (string.IsNullOrEmpty(name)) return;
+        // If PlayerPrefs is 0, they haven't set a name yet
+        if (PlayerPrefs.GetInt("HasSetPCName", 0) == 0)
+        {
+            if (pcNamePanel != null) pcNamePanel.SetActive(true);
+        }
+    }
+
+    // 2. We link this directly to the "Save Name" Button
+    public void SaveNameFromUI()
+    {
+        if (pcNameInput == null || string.IsNullOrEmpty(pcNameInput.text)) return;
+
+        string chosenName = pcNameInput.text;
 
         var request = new UpdateUserTitleDisplayNameRequest
         {
-            DisplayName = name
+            DisplayName = chosenName
         };
 
         PlayFabClientAPI.UpdateUserTitleDisplayName(request, result => {
             Debug.Log("PC: Player Name updated to: " + result.DisplayName);
-        }, OnPlayFabError);
+
+            // Save a flag so we never show the popup again
+            PlayerPrefs.SetInt("HasSetPCName", 1);
+            PlayerPrefs.Save();
+
+            // Hide the UI panel
+            if (pcNamePanel != null) pcNamePanel.SetActive(false);
+
+        }, (PlayFab.PlayFabError error) => {
+            Debug.LogError("PC: Name Update Error: " + error.GenerateErrorReport());
+        });
     }
 #endif
 }
