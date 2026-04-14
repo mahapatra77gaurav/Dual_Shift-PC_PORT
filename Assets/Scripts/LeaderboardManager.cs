@@ -88,12 +88,26 @@ public class LeaderboardManager : MonoBehaviour
     // --- PLAYFAB LOGIN LOGIC ---
     private void LoginToPlayFab()
     {
-        Debug.Log("PC: Attempting PlayFab Login...");
+        Debug.Log("PC/Mac: Attempting PlayFab Login...");
+
+        // 1. Check if we already created an ID for this player
+        string customId = PlayerPrefs.GetString("MyCustomPlayFabID", "");
+
+        // 2. If they don't have one, generate a random secure ID and save it forever
+        if (string.IsNullOrEmpty(customId))
+        {
+            customId = System.Guid.NewGuid().ToString();
+            PlayerPrefs.SetString("MyCustomPlayFabID", customId);
+            PlayerPrefs.Save();
+        }
+
+        // 3. Log in using our custom ID instead of the Mac Hardware ID
         var request = new LoginWithCustomIDRequest
         {
-            CustomId = SystemInfo.deviceUniqueIdentifier,
+            CustomId = customId,
             CreateAccount = true
         };
+
         PlayFabClientAPI.LoginWithCustomID(request, OnLoginSuccess, OnPlayFabError);
     }
 
