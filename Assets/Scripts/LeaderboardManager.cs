@@ -36,6 +36,7 @@ public class LeaderboardManager : MonoBehaviour
     [Header("PC Username UI")]
     public GameObject pcNamePanel;
     public TMP_InputField pcNameInput;
+    public TMP_Text nameErrorText;
 
     public void OpenHelpPopup()
     {
@@ -262,31 +263,37 @@ public class LeaderboardManager : MonoBehaviour
     }
 
 #if !UNITY_ANDROID
-    // --- PC SPECIFIC REFRESH LOGIC ---
     public void RefreshPlayFabBoard(string statName)
     {
+        // Hide the personal score row while loading
+        if (myScoreRow != null) myScoreRow.gameObject.SetActive(false);
+
+        // 1. Fetch the Top 100 for the scrolling board
         var request = new GetLeaderboardRequest
         {
             StatisticName = statName,
             StartPosition = 0,
-            MaxResultsCount = 10
+            MaxResultsCount = 100 // <--- CHANGED THIS FROM 10 TO 100
         };
 
         PlayFabClientAPI.GetLeaderboard(request, result => {
+
+            // Clear old UI rows
             foreach (Transform child in rowContainer) Destroy(child.gameObject);
 
+            // Spawn up to 100 rows in the scroll view!
             foreach (var item in result.Leaderboard)
             {
                 GameObject rowObj = Instantiate(rowPrefab, rowContainer);
                 LeaderboardRowUI rowScript = rowObj.GetComponent<LeaderboardRowUI>();
 
                 string displayName = string.IsNullOrEmpty(item.DisplayName) ? "Guest_" + item.PlayFabId.Substring(0, 5) : item.DisplayName;
-
-                // Highlight the player's own row if it's them
-                if (item.PlayFabId == result.Leaderboard[0].PlayFabId) { /* Optional logic */ }
-
                 rowScript.SetData((item.Position + 1).ToString(), displayName, item.StatValue.ToString());
             }
+
+            // 2. Now fetch the CURRENT PLAYER'S rank to put at the bottom
+            FetchMyPlayFabScore(statName);
+
         }, OnPlayFabError);
     }
 #endif
@@ -367,6 +374,13 @@ public class LeaderboardManager : MonoBehaviour
     {
         if (pcNameInput == null || string.IsNullOrEmpty(pcNameInput.text)) return;
 
+        // Reset to White and show "Saving..." when they click the button
+        if (nameErrorText != null)
+        {
+            nameErrorText.text = "Saving...";
+            nameErrorText.color = Color.white;
+        }
+
         string chosenName = pcNameInput.text;
 
         var request = new UpdateUserTitleDisplayNameRequest
@@ -377,16 +391,76 @@ public class LeaderboardManager : MonoBehaviour
         PlayFabClientAPI.UpdateUserTitleDisplayName(request, result => {
             Debug.Log("PC: Player Name updated to: " + result.DisplayName);
 
-            // Save a flag so we never show the popup again
             PlayerPrefs.SetInt("HasSetPCName", 1);
             PlayerPrefs.Save();
 
-            // Hide the UI panel
             if (pcNamePanel != null) pcNamePanel.SetActive(false);
 
         }, (PlayFab.PlayFabError error) => {
-            Debug.LogError("PC: Name Update Error: " + error.GenerateErrorReport());
+
+            // IF IT FAILS, CHANGE IT TO RED:
+            if (nameErrorText != null)
+            {
+                if (error.Error == PlayFabErrorCode.NameNotAvailable)
+                {
+                    nameErrorText.text = "Name already taken!";
+                    nameErrorText.color = Color.red;
+                }
+                else if (error.Error == PlayFabErrorCode.ProfaneDisplayName)
+                {
+                    nameErrorText.text = "That name is not allowed.";
+                    nameErrorText.color = Color.red;
+                }
+                else
+                {
+                    nameErrorText.text = "Invalid Name (3-25 characters)";
+                    nameErrorText.color = Color.red;
+                }
+            }
+
+            // Clear the input box so they can try again
+            pcNameInput.text = "";
         });
+    }
+#endif
+
+#if !UNITY_ANDROID
+    // Helper method to get the logged-in player's exact rank
+    private void FetchMyPlayFabScore(string statName)
+    {
+        var myScoreRequest = new GetLeaderboardAroundPlayerRequest
+        {
+            StatisticName = statName,
+            MaxResultsCount = 1 // We only want 1 result: The player themselves
+        };
+
+        PlayFabClientAPI.GetLeaderboardAroundPlayer(myScoreRequest, result => {
+
+            // Check if the player actually has a score on the board
+            if (result.Leaderboard.Count > 0)
+            {
+                var myData = result.Leaderboard[0];
+
+                string displayName = string.IsNullOrEmpty(myData.DisplayName) ? "YOU" : $"YOU ({myData.DisplayName})";
+
+                if (myScoreRow != null)
+                {
+                    myScoreRow.gameObject.SetActive(true);
+                    // Position is 0-indexed, so we add 1 to get their actual Rank
+                    myScoreRow.SetData((myData.Position + 1).ToString(), displayName, myData.StatValue.ToString());
+                }
+
+                // Hide the help button since they have a score
+                if (helpButton != null) helpButton.SetActive(false);
+            }
+            else
+            {
+                // They haven't played yet, so leave the bottom row hidden
+                if (myScoreRow != null) myScoreRow.gameObject.SetActive(false);
+                if (helpButton != null) helpButton.SetActive(true);
+            }
+
+        }, OnPlayFabError);
     }
 #endif
 }
